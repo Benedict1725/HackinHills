@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api", tags=["defense"])
 def _out(c: DefenseConfig, db: Session) -> DefenseConfigOut:
     u = db.get(User, c.created_by) if c.created_by else None
     return DefenseConfigOut(id=c.id, name=c.name, input_screen=bool(c.input_validation), hardened_prompt=bool(c.hardened_prompt),
-                            output_redaction=bool(c.output_checking), policy_text=c.policy_text or "", is_active=bool(c.is_active),
+                            output_redaction=bool(c.output_checking), output_contract=bool(c.output_contract), policy_text=c.policy_text or "", is_active=bool(c.is_active),
                             created_by=u.email if u else None, created_at=c.created_at)
 
 
@@ -30,10 +30,12 @@ def get_config(user: User = Depends(require_roles("blue_team", "admin")), db: Se
 def save_config(req: DefenseConfigIn, user: User = Depends(require_roles("blue_team")), db: Session = Depends(get_db)):
     prev = defense_store.get_active(db)
     c = defense_store.save_new_version(db, name=req.name, input_screen=req.input_screen, hardened_prompt=req.hardened_prompt,
-                                       output_redaction=req.output_redaction, policy_text=req.policy_text, user_id=user.id)
+                                       output_redaction=req.output_redaction, output_contract=req.output_contract,
+                                       policy_text=req.policy_text, user_id=user.id)
     audit.record(db, action="defense.config.update", actor=user.email, outcome="success", details={
         "role": user.role, "config_id": c.id, "previous_config_id": prev.id if prev else None,
         "input_screen": req.input_screen, "hardened_prompt": req.hardened_prompt, "output_redaction": req.output_redaction,
+        "output_contract": req.output_contract,
         "policy_text_length": len(req.policy_text)})  # policy text itself is not copied into the log
     return _out(c, db)
 

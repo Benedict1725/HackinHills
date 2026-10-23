@@ -169,6 +169,7 @@ class DefenseConfigIn(BaseModel):
     input_screen: bool = True
     hardened_prompt: bool = True
     output_redaction: bool = True
+    output_contract: bool = True
     policy_text: str = Field(default="", max_length=1000)
 
     @field_validator("name", "policy_text")
@@ -183,6 +184,7 @@ class DefenseConfigOut(BaseModel):
     input_screen: bool
     hardened_prompt: bool
     output_redaction: bool
+    output_contract: bool
     policy_text: str
     is_active: bool
     created_by: str | None

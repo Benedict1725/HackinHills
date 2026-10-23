@@ -36,6 +36,8 @@ class DefenseConfig(Base):
     input_validation: Mapped[bool] = mapped_column(Boolean, default=True)
     output_checking: Mapped[bool] = mapped_column(Boolean, default=True)
     hardened_prompt: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Enforces explicit response-format contracts from trusted system instructions.
+    output_contract: Mapped[bool] = mapped_column(Boolean, default=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=False)
     policy_text: Mapped[str] = mapped_column(Text, default="")
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)

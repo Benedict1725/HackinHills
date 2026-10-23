@@ -90,8 +90,8 @@ def test_partial_defense_leaves_remaining_failures(env):
     c.post("/api/defense/config", json={"input_screen": False, "hardened_prompt": False, "output_redaction": True}, headers=b)
     d = c.post("/api/comparisons/run", headers=b).json()
     left = {x["test_case_id"] for x in d["remaining_failures"]}
-    assert left == {"pi-001", "ic-001", "ic-002"}   # redaction cannot fix these
-    assert d["defense_effectiveness"] == 62.5       # (8 - 3) / 8
+    assert left == {"pi-001"}  # redaction plus the default output-contract control fixes the conflict cases
+    assert d["defense_effectiveness"] == 87.5       # (8 - 1) / 8
     assert any(p["defense_triggered"] for p in d["per_test"])
 
 

@@ -8,11 +8,12 @@ import { CompareBars, Donut, TrendChart, lastDays } from "../components/teamViz"
 
 const BLUES = ["#3b82f6", "#60a5fa", "#2563eb", "#93c5fd", "#1e40af"];
 
-const DEFAULTS = { name: "Blue Team policy", input_screen: true, hardened_prompt: true, output_redaction: true, policy_text: "" };
+const DEFAULTS = { name: "Blue Team policy", input_screen: true, hardened_prompt: true, output_redaction: true, output_contract: true, policy_text: "" };
 const RULES = [
   ["input_screen", "Input screen", "Blocks prompts matching known override / unrestricted-mode / secret-extraction patterns before the model sees them. Easy to evade with paraphrasing."],
   ["hardened_prompt", "Hardened system prompt", "Adds an instruction-hierarchy policy (plus your policy text) to the system prompt. Effect depends on the model."],
   ["output_redaction", "Output safety check", "Redacts registered synthetic secrets from responses; withholds responses that contain them reversed or base64-encoded."],
+  ["output_contract", "Output contract enforcement", "Enforces explicit uppercase-only and literal end-token requirements from trusted system instructions after output redaction."],
 ];
 const pct = (v) => (v == null ? "—" : `${v}%`);
 
@@ -35,7 +36,7 @@ export default function BlueTeam() {
     try {
       const c = await api.defenseConfig();
       setCfg(c);
-      if (c.active) setDraft({ name: c.active.name, input_screen: c.active.input_screen, hardened_prompt: c.active.hardened_prompt, output_redaction: c.active.output_redaction, policy_text: c.active.policy_text });
+      if (c.active) setDraft({ name: c.active.name, input_screen: c.active.input_screen, hardened_prompt: c.active.hardened_prompt, output_redaction: c.active.output_redaction, output_contract: c.active.output_contract ?? true, policy_text: c.active.policy_text });
       setCmp(await api.latestComparison());
       api.dashboard().then(setDash).catch(() => {});
       api.tests({ limit: 200 }).then((d) => setRecent(d.items)).catch(() => {});
@@ -58,10 +59,10 @@ export default function BlueTeam() {
 
   if (!cfg && !error) return <Loading label="Loading defense settings…" />;
   const active = cfg?.active;
-  const dirty = active && JSON.stringify(draft) !== JSON.stringify({ name: active.name, input_screen: active.input_screen, hardened_prompt: active.hardened_prompt, output_redaction: active.output_redaction, policy_text: active.policy_text });
+  const dirty = active && JSON.stringify(draft) !== JSON.stringify({ name: active.name, input_screen: active.input_screen, hardened_prompt: active.hardened_prompt, output_redaction: active.output_redaction, output_contract: active.output_contract ?? true, policy_text: active.policy_text });
   const enabled = active ? RULES.filter(([k]) => active[k]).length : 0;
   const days = lastDays(recent.filter((t) => t.mode === "defended"));
-  const SHORT = { input_screen: "Input screen", hardened_prompt: "Hardened prompt", output_redaction: "Output check" };
+  const SHORT = { input_screen: "Input screen", hardened_prompt: "Hardened prompt", output_redaction: "Output check", output_contract: "Output contract" };
   const rows = (cfg?.history || []);
   const ConfigTable = ({ limit }) => rows.length === 0 ? <div className="empty">No configuration saved yet.</div> : (
     <div className="table-wrap"><table>

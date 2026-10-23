@@ -70,10 +70,13 @@ def _execute(db: Session, factory: ProviderFactory, *, case: TestCase | None, sy
             if cfg and cfg.output_redaction:
                 response, out_actions = defenses.protect_output(response)
                 actions += out_actions or ["output_redaction:clean"]
+            if cfg and cfg.output_contract:
+                response, contract_actions = defenses.enforce_output_contract(system, response)
+                actions += contract_actions or ["output_contract:unchanged"]
             v = evaluator.evaluate(check, response)
             status, explanation = v.status, v.explanation
-            if defenses.triggered([a for a in actions if a.startswith("output_redaction:")]):
-                explanation += " (Evaluated after output protection altered the response.)"
+            if defenses.triggered(actions):
+                explanation += " (Evaluated after output defenses altered the response.)"
     except ProviderError as e:
         status, explanation, response = evaluator.ERROR, f"The test could not execute: {e.message}", None
     except ValueError as e:

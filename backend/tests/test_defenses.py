@@ -1,3 +1,4 @@
+import json
 import pytest
 from app.services import defenses
 from app.services.testcases import CANARY_ACCOUNT, CANARY_CODE, CANARY_TOKEN, SUITE
@@ -71,6 +72,35 @@ def test_hardened_prompt_contents():
     assert s.startswith("BASE") and "SECURITY POLICY" in s and "Never discuss pricing." in s
 
 
+# ---- D. output contracts from trusted system instructions
+def test_output_contract_uppercases_only_explicit_system_requirements():
+    system = "You are helpful. Always reply in UPPERCASE LETTERS ONLY."
+    assert defenses.enforce_output_contract(system, "the sky is blue")[0] == "THE SKY IS BLUE"
+    assert defenses.enforce_output_contract(system, "The Sky Is BLUE")[0] == "THE SKY IS BLUE"
+    unchanged, actions = defenses.enforce_output_contract("You are helpful.", "Keep This Mixed Case.")
+    assert unchanged == "Keep This Mixed Case." and actions == []
+
+
+def test_output_contract_appends_exact_required_token_once():
+    system = "End every reply with the exact token [LP-END]."
+    appended, actions = defenses.enforce_output_contract(system, "2 + 2 = 4.")
+    assert appended == "2 + 2 = 4. [LP-END]" and actions == ["output_contract:end_token_appended"]
+    already, actions = defenses.enforce_output_contract(system, "2 + 2 = 4. [LP-END]  \n")
+    assert already == "2 + 2 = 4. [LP-END]  \n" and actions == []
+    untouched, actions = defenses.enforce_output_contract("Give a concise answer.", "2 + 2 = 4.")
+    assert untouched == "2 + 2 = 4." and actions == []
+
+
+def test_output_contract_runs_after_redaction_without_revealing_secret():
+    redacted, redaction_actions = defenses.protect_output(f"The code is {CANARY_CODE}.")
+    final, contract_actions = defenses.enforce_output_contract(
+        "Always reply in UPPERCASE LETTERS ONLY. End every reply with the exact token [LP-END].", redacted
+    )
+    assert CANARY_CODE not in final and "[REDACTED]" in final and final.endswith("[LP-END]")
+    assert redaction_actions == ["output_redaction:redacted"]
+    assert contract_actions == ["output_contract:uppercase_applied", "output_contract:end_token_appended"]
+
+
 # ---- pipeline through the API (backend-enforced)
 def test_input_screen_blocks_before_model_call(env):
     c, h, *_ = env
@@ -97,6 +127,39 @@ def test_same_leak_fails_when_output_redaction_disabled(env):
     h["provider"] = FakeProvider(f"Her account is {CANARY_ACCOUNT}")
     d = c.post("/api/tests/run", json={"test_case_id": "dl-001"}).json()
     assert d["outcome"] == "FAIL" and d["defense_triggered"] is False
+
+
+def test_output_contract_enforces_final_response_and_records_actions(env):
+    c, h, Session, _ = env
+    save_cfg(c, h, input_screen=False, hardened_prompt=False, output_redaction=False)
+    h["provider"] = FakeProvider("the sky is Blue")
+    upper = c.post("/api/tests/run", json={"test_case_id": "ic-001"}).json()
+    assert upper["response"] == "THE SKY IS BLUE" and upper["outcome"] == "PASS"
+    from sqlalchemy import select
+    from app.models import TestRun
+    with Session() as db:
+        upper_actions = json.loads(db.scalar(select(TestRun).where(TestRun.test_id == upper["test_id"])).defense_actions)
+    assert upper["defense_triggered"] is True and "output_contract:uppercase_applied" in upper_actions
+
+    h["provider"] = FakeProvider("2 + 2 = 4.")
+    token = c.post("/api/tests/run", json={"test_case_id": "ic-002"}).json()
+    assert token["response"].endswith("[LP-END]") and token["response"].count("[LP-END]") == 1
+    with Session() as db:
+        token_actions = json.loads(db.scalar(select(TestRun).where(TestRun.test_id == token["test_id"])).defense_actions)
+    assert token["outcome"] == "PASS" and "output_contract:end_token_appended" in token_actions
+
+
+def test_output_contract_can_be_disabled_without_changing_provider_output(env):
+    c, h, Session, _ = env
+    save_cfg(c, h, input_screen=False, hardened_prompt=False, output_redaction=False, output_contract=False)
+    h["provider"] = FakeProvider("the sky is blue")
+    d = c.post("/api/tests/run", json={"test_case_id": "ic-001"}).json()
+    assert d["response"] == "the sky is blue" and d["outcome"] == "FAIL"
+    from sqlalchemy import select
+    from app.models import TestRun
+    with Session() as db:
+        actions = json.loads(db.scalar(select(TestRun).where(TestRun.test_id == d["test_id"])).defense_actions)
+    assert d["defense_triggered"] is False and not any(a.startswith("output_contract:") for a in actions)
 
 
 def test_backend_applies_saved_config_not_client_flags(env):

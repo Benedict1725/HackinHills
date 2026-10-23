@@ -35,6 +35,7 @@ class DefenseSettings:
     hardened_prompt: bool
     output_redaction: bool
     policy_text: str = ""
+    output_contract: bool = True
 
 
 def validate_prompt(prompt: str, max_chars: int) -> None:
@@ -76,6 +77,58 @@ def protect_output(response: str) -> tuple[str, list[str]]:
     return out, actions
 
 
+# These patterns deliberately apply only to the trusted system message supplied by the
+# application. User content is never parsed as a contract and therefore cannot request
+# an output transformation for itself.
+_UPPERCASE_ONLY = re.compile(
+    r"\b(?:always\s+)?(?:reply|respond|answer|write)\s+(?:only\s+)?(?:in\s+)?uppercase(?:\s+letters?)?(?:\s+only)?\b"
+    r"|\buppercase\s+letters?\s+only\b", re.I,
+)
+_ENDING_TOKEN = re.compile(
+    r"\b(?:end|finish|conclude)\s+(?:every\s+)?(?:reply|response|answer)\s+with\s+"
+    r"(?:the\s+)?(?:exact\s+)?(?:literal\s+)?(?:token\s+)?(?P<token>\[[^\]\r\n]+\]|['\"][^'\"\r\n]+['\"])", re.I,
+)
+
+
+def output_contracts(system: str) -> tuple[bool, str | None]:
+    """Return explicit, trusted-system output requirements supported by this defense."""
+    uppercase_only = bool(_UPPERCASE_ONLY.search(system))
+    match = _ENDING_TOKEN.search(system)
+    if not match:
+        return uppercase_only, None
+    token = match.group("token")
+    if token[:1] in "'\"":
+        token = token[1:-1]
+    return uppercase_only, token
+
+
+def enforce_output_contract(system: str, response: str) -> tuple[str, list[str]]:
+    """Apply explicit response contracts from a trusted system instruction.
+
+    The transformations are intentionally narrow: alphabetic case is changed only for
+    an uppercase-only rule, and a literal token is added only for an explicit ending
+    requirement. This runs on the already-redacted response so the evaluator and saved
+    outcome always see the final response.
+    """
+    uppercase_only, end_token = output_contracts(system)
+    out, actions = response, []
+    if uppercase_only:
+        upper = out.upper()
+        if upper != out:
+            out = upper
+            actions.append("output_contract:uppercase_applied")
+    if end_token and not out.rstrip().endswith(end_token):
+        separator = "" if not out or out[-1].isspace() else " "
+        out = f"{out}{separator}{end_token}"
+        actions.append("output_contract:end_token_appended")
+    return out, actions
+
+
 def triggered(actions: list[str]) -> bool:
     """A defense 'triggered' when it blocked, redacted or withheld (merely being active does not count)."""
-    return any(a.startswith("input_screen:blocked") or a in ("output_redaction:redacted", "output_redaction:withheld_encoded") for a in actions)
+    return any(
+        a.startswith("input_screen:blocked")
+        or a in ("output_redaction:redacted", "output_redaction:withheld_encoded")
+        or a in ("output_contract:uppercase_applied", "output_contract:end_token_appended")
+        for a in actions
+    )

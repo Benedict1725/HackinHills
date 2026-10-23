@@ -43,7 +43,11 @@ _NEW_COLUMNS = {
         "owner_role": "VARCHAR(16)", "run_group_id": "VARCHAR(32)", "comparison_id": "VARCHAR(32)",
         "defense_triggered": "BOOLEAN DEFAULT 0", "defense_actions": "TEXT",
     },
-    "defense_configs": {"hardened_prompt": "BOOLEAN DEFAULT 1", "is_active": "BOOLEAN DEFAULT 0"},
+    "defense_configs": {
+        "hardened_prompt": "BOOLEAN DEFAULT 1", "is_active": "BOOLEAN DEFAULT 0",
+        # Existing saved configurations retain secure, backwards-compatible behavior.
+        "output_contract": "BOOLEAN DEFAULT 1",
+    },
     "audit_events": {"ts": "VARCHAR(40)", "test_id": "VARCHAR(32)", "prev_hash": "VARCHAR(64)", "event_hash": "VARCHAR(64)"},
 }
 
