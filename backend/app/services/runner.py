@@ -70,9 +70,6 @@ def _execute(db: Session, factory: ProviderFactory, *, case: TestCase | None, sy
             if cfg and cfg.output_redaction:
                 response, out_actions = defenses.protect_output(response)
                 actions += out_actions or ["output_redaction:clean"]
-            if cfg and cfg.hardened_prompt:
-                response, contract_actions = defenses.enforce_output_contract(system, response)
-                actions += contract_actions
             v = evaluator.evaluate(check, response)
             status, explanation = v.status, v.explanation
             if defenses.triggered([a for a in actions if a.startswith("output_redaction:")]):
@@ -154,4 +151,3 @@ def run_comparison(db, factory, owner: User, cfg: DefenseSettings):
     base = _suite(db, factory, owner, "baseline", None, bg, cid)
     defd = _suite(db, factory, owner, "defended", cfg, dg, cid)
     return bg, base, dg, defd
-

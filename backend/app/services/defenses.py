@@ -76,46 +76,6 @@ def protect_output(response: str) -> tuple[str, list[str]]:
     return out, actions
 
 
-_UPPERCASE_ONLY = re.compile(
-    r"\b(?:always\s+)?(?:reply|respond|answer)\s+(?:in\s+)?uppercase(?:\s+letters?)?(?:\s+only)?\b",
-    re.I,
-)
-_ENDING_TOKEN = re.compile(
-    r"\bend\s+(?:every\s+)?(?:reply|response|answer)\s+with\s+(?:the\s+)?(?:exact\s+)?token\s+"
-    r"(?P<token>\[[^\]\r\n]+\]|`[^`\r\n]+`|\"[^\"\r\n]+\"|'[^'\r\n]+')",
-    re.I,
-)
-
-
-def enforce_output_contract(system: str, response: str) -> tuple[str, list[str]]:
-    """Apply explicit formatting contracts found in a trusted system instruction."""
-    out, actions = response, []
-    if _UPPERCASE_ONLY.search(system):
-        upper = out.upper()
-        if upper != out:
-            out = upper
-            actions.append("output_contract:uppercase_enforced")
-    match = _ENDING_TOKEN.search(system)
-    if match:
-        token = match.group("token")
-        if token[0] in "`\"'":
-            token = token[1:-1]
-        trimmed = out.rstrip()
-        if not trimmed.endswith(token):
-            out = f"{trimmed}{token}"
-            actions.append("output_contract:ending_token_appended")
-        elif trimmed != out:
-            out = trimmed
-            actions.append("output_contract:ending_token_trimmed")
-    return out, actions
-
-
 def triggered(actions: list[str]) -> bool:
-    """A defense 'triggered' when it blocked, redacted, withheld or enforced a contract."""
-    return any(
-        a.startswith("input_screen:blocked")
-        or a.startswith("output_contract:")
-        or a in ("output_redaction:redacted", "output_redaction:withheld_encoded")
-        for a in actions
-    )
-
+    """A defense 'triggered' when it blocked, redacted or withheld (merely being active does not count)."""
+    return any(a.startswith("input_screen:blocked") or a in ("output_redaction:redacted", "output_redaction:withheld_encoded") for a in actions)
