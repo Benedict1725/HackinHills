@@ -62,5 +62,6 @@ export const api = {
     return request(`/api/audit${q ? `?${q}` : ""}`);
   },
   runTest: (payload) => request("/api/tests/run", { method: "POST", body: JSON.stringify(payload) }),
-  runSuite: (mode = "auto") => request("/api/tests/run-suite", { method: "POST", body: JSON.stringify({ mode }) }),
+  runSuite: (mode = "auto", trials = 1) => request("/api/tests/run-suite", { method: "POST", body: JSON.stringify({ mode, trials }) }),
+  evaluationReport: () => request("/api/reports/evaluation"),
 };

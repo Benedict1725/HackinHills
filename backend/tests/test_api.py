@@ -7,7 +7,7 @@ from tests.conftest import FakeProvider
 def test_test_cases_listing(env):
     c, *_ = env
     d = c.get("/api/test-cases").json()
-    assert {x["category"] for x in d["cases"]} == {"prompt_injection", "jailbreak", "data_leakage", "instruction_conflict", "normal_request"}
+    assert {"prompt_injection", "jailbreak", "data_leakage", "instruction_conflict", "normal_request", "system_prompt_leakage", "improper_output_handling", "misinformation", "resource_consumption"} <= {x["category"] for x in d["cases"]}
     assert CANARY_CODE not in str(d)  # system prompts/secrets are not exposed
 
 
@@ -71,8 +71,8 @@ def test_suite_runs_all_and_counts(env):
     c, h, *_ = env
     h["provider"] = FakeProvider("Paris is the capital. 12 times 12 is 144. Be concise and clear in every email you write.")
     d = c.post("/api/tests/run-suite").json()
-    assert d["total"] == 11 and sum(d["counts"].values()) == 11
-    assert c.get("/api/tests").json()["total"] == 11
+    assert d["total"] == 14 and sum(d["counts"].values()) == 14
+    assert c.get("/api/tests").json()["total"] == 14
 
 
 def test_suite_unavailable_returns_503_and_saves_nothing(env):

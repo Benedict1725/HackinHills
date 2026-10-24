@@ -2,9 +2,10 @@ from datetime import datetime
 from typing import Literal
 from pydantic import BaseModel, Field, field_validator, model_validator
 from .config import MAX_PROMPT_CHARS
+from .services.testcases import CATEGORIES
 
 Status = Literal["PASS", "FAIL", "NEEDS_REVIEW", "ERROR"]
-CategoryId = Literal["prompt_injection", "jailbreak", "data_leakage", "instruction_conflict", "normal_request"]
+CategoryId = str
 
 
 class HealthResponse(BaseModel):
@@ -34,6 +35,11 @@ class TestCaseOut(BaseModel):
     name: str
     description: str
     prompt: str
+    severity: str
+    success_criteria: str
+    remediation: str
+    owasp: list[str]
+    availability: str
 
 
 class TestCasesResponse(BaseModel):
@@ -49,11 +55,19 @@ class RunTestRequest(BaseModel):
     test_case_id: str | None = Field(default=None, max_length=32)
     prompt: str | None = Field(default=None, max_length=MAX_PROMPT_CHARS)
     category: CategoryId | None = None
+    trials: int = Field(default=1, ge=1, le=25)
 
     @field_validator("prompt")
     @classmethod
     def _strip(cls, v):
         return v.strip() if v is not None else v
+
+    @field_validator("category")
+    @classmethod
+    def _known_category(cls, v):
+        if v is not None and v not in CATEGORIES:
+            raise ValueError("Unknown category.")
+        return v
 
     @model_validator(mode="after")
     def _one_mode(self):
@@ -80,6 +94,8 @@ class TestSummary(BaseModel):
     run_group_id: str | None
     duration_ms: int | None
     created_at: datetime
+    trial_number: int = 1
+    test_suite_version: str | None = None
 
 
 class TestDetail(TestSummary):
@@ -90,6 +106,11 @@ class TestDetail(TestSummary):
     # Visible to Blue Team and Admin only (Red Team must not learn the private configuration):
     defense_config_id: int | None = None
     defense_actions: list[str] | None = None
+    human_review_status: Literal["CONFIRMED", "DISPUTED", "NOT_REVIEWED"] = "NOT_REVIEWED"
+
+
+class HumanReviewRequest(BaseModel):
+    status: Literal["CONFIRMED", "DISPUTED"]
 
 
 class TestListResponse(BaseModel):
@@ -102,6 +123,7 @@ class TestListResponse(BaseModel):
 
 class RunSuiteRequest(BaseModel):
     mode: Literal["auto", "baseline", "defended"] = "auto"
+    trials: int = Field(default=1, ge=1, le=25)
 
 
 class SuiteResponse(BaseModel):
@@ -109,6 +131,8 @@ class SuiteResponse(BaseModel):
     total: int
     counts: dict[str, int]
     results: list[TestDetail]
+    trials: int = 1
+    limitations: list[str] = []
 
 
 class CategoryCounts(BaseModel):
@@ -117,6 +141,8 @@ class CategoryCounts(BaseModel):
     FAIL: int = 0
     NEEDS_REVIEW: int = 0
     ERROR: int = 0
+    confirmed_sample_count: int = 0
+    attack_success_rate: float | None = None
 
 
 class MetricsSummary(BaseModel):

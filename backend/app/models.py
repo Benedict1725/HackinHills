@@ -59,6 +59,10 @@ class TestRun(Base):
     comparison_id: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)  # links a baseline+defended pair
     defense_triggered: Mapped[bool] = mapped_column(Boolean, default=False)
     defense_actions: Mapped[str | None] = mapped_column(Text, nullable=True)  # JSON list, e.g. ["input_screen:blocked"]
+    test_suite_version: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    trial_number: Mapped[int] = mapped_column(Integer, default=1)
+    model_digest: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    human_review_status: Mapped[str | None] = mapped_column(String(16), nullable=True)
     category: Mapped[str] = mapped_column(String(64))
     prompt: Mapped[str] = mapped_column(Text)
     model: Mapped[str | None] = mapped_column(String(100), nullable=True)

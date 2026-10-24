@@ -12,7 +12,7 @@ from ..config import MAX_PROMPT_CHARS, get_settings
 from ..models import TestRun, User
 from . import audit, defenses, evaluator
 from .defenses import DefenseSettings
-from .testcases import CUSTOM_CHECK, CUSTOM_SYSTEM, SUITE, TestCase
+from .testcases import CUSTOM_CHECK, CUSTOM_SYSTEM, SUITE, SUITE_VERSION, TestCase
 
 log = logging.getLogger("leakproof.runner")
 ProviderFactory = Callable[[], Provider]
@@ -91,6 +91,7 @@ def _execute(db: Session, factory: ProviderFactory, *, case: TestCase | None, sy
         explanation=explanation, duration_ms=int((time.perf_counter() - start) * 1000), mode=mode, is_demo=False,
         owner_role=owner.role, user_id=owner.id, run_group_id=group_id, comparison_id=comparison_id, defense_config_id=cfg.config_id if cfg else None,
         defense_triggered=trig, defense_actions=json.dumps(actions),
+        test_suite_version=SUITE_VERSION if case else None,
     )
     db.add(row)
     db.commit()
@@ -113,9 +114,18 @@ def _locked(fn):
     return wrapper
 
 
-def _suite(db, factory, owner, mode, cfg, group_id, comparison_id=None):
-    return [_execute(db, factory, case=c, system=c.system, user=c.user, check=c.check, category=c.category,
-                     cfg=cfg, mode=mode, owner=owner, group_id=group_id, comparison_id=comparison_id) for c in SUITE]
+def _suite(db, factory, owner, mode, cfg, group_id, comparison_id=None, trials=1):
+    rows = []
+    for trial in range(1, trials + 1):
+        for c in SUITE:
+            if c.availability != "implemented":
+                continue
+            row = _execute(db, factory, case=c, system=c.system, user=c.user, check=c.check, category=c.category,
+                           cfg=cfg, mode=mode, owner=owner, group_id=group_id, comparison_id=comparison_id)
+            row.trial_number = trial
+            db.commit(); db.refresh(row)
+            rows.append(row)
+    return rows
 
 
 def _require_model(factory):
@@ -140,10 +150,10 @@ def run_custom(db, factory, prompt: str, category: str, owner: User, mode: str, 
 
 
 @_locked
-def run_suite(db, factory, owner: User, mode: str, cfg) -> tuple[str, list[TestRun]]:
+def run_suite(db, factory, owner: User, mode: str, cfg, trials: int = 1) -> tuple[str, list[TestRun]]:
     _require_model(factory)  # fail fast instead of recording N identical errors
     gid = new_group_id()
-    return gid, _suite(db, factory, owner, mode, cfg, gid)
+    return gid, _suite(db, factory, owner, mode, cfg, gid, trials=trials)
 
 
 @_locked

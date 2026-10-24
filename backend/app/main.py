@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import func, select
 from .database import DATABASE_URL, SessionLocal, init_db
 from .models import User
-from .routes import ai, audit, auth, dashboard, defense, health, tests
+from .routes import ai, audit, auth, dashboard, defense, health, reports, tests
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -63,5 +63,5 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
-for r in (health, auth, ai, dashboard, defense, tests, audit):
+for r in (health, auth, ai, dashboard, defense, tests, audit, reports):
     app.include_router(r.router)

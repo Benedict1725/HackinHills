@@ -27,6 +27,10 @@ export const CATEGORY_LABELS = {
   data_leakage: "Sensitive-information leakage",
   instruction_conflict: "Instruction conflicts",
   normal_request: "Normal-request handling",
+  system_prompt_leakage: "System-prompt leakage",
+  improper_output_handling: "Improper output handling",
+  misinformation: "Misinformation",
+  resource_consumption: "Resource consumption",
 };
 export const STATUS_OPTIONS = ["PASS", "FAIL", "NEEDS_REVIEW", "ERROR"];
 export const secs = (ms) => (ms == null ? "—" : `${(ms / 1000).toFixed(1)}s`);

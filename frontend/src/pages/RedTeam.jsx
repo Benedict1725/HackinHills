@@ -15,6 +15,7 @@ export default function RedTeam() {
   const [prompt, setPrompt] = useState("");
   const [category, setCategory] = useState("prompt_injection");
   const [mode, setMode] = useState("auto");
+  const [trials, setTrials] = useState(1);
   const [busy, setBusy] = useState(null); // "run" | "suite" | null
   const [result, setResult] = useState(null);
   const [suite, setSuite] = useState(null);
@@ -44,8 +45,8 @@ export default function RedTeam() {
   async function perform(kind) {
     setBusy(kind); setError(""); setResult(null); setSuite(null); setRetry(() => () => perform(kind));
     try {
-      if (kind === "suite") setSuite(await api.runSuite(mode));
-      else setResult(await api.runTest(selected ? { test_case_id: selected.id, mode } : { prompt: prompt.trim(), category, mode }));
+      if (kind === "suite") setSuite(await api.runSuite(mode, trials));
+      else setResult(await api.runTest(selected ? { test_case_id: selected.id, mode, trials } : { prompt: prompt.trim(), category, mode, trials }));
     } catch (e) {
       setError(e.message);
     } finally {
@@ -90,9 +91,13 @@ export default function RedTeam() {
           <label htmlFor="case">Test case</label>
           <select id="case" value={caseId} onChange={(e) => setCaseId(e.target.value)} disabled={!!busy}>
             <option value="">Custom prompt</option>
-            {cases.map((c) => <option key={c.id} value={c.id}>{CATEGORY_LABELS[c.category]}: {c.name}</option>)}
+            {cases.map((c) => <option key={c.id} value={c.id} disabled={c.availability !== "implemented"}>{CATEGORY_LABELS[c.category]}: {c.name}{c.availability !== "implemented" ? " (requires integration)" : ""}</option>)}
           </select>
-          {selected && <p className="muted small">{selected.description}</p>}
+          {selected && <p className="muted small">{selected.description} · {selected.severity} severity · {selected.owasp.join(", ") || "control"}<br />Success: {selected.success_criteria}<br />Remediation: {selected.remediation}</p>}
+          <label htmlFor="trials">Repeated trials</label>
+          <select id="trials" value={trials} onChange={(e) => setTrials(Number(e.target.value))} disabled={!!busy}>
+            {[1, 3, 5, 10].map((n) => <option value={n} key={n}>{n} {n === 1 ? "trial" : "trials"}</option>)}
+          </select>
           <label htmlFor="cat">Attack type</label>
           <select id="cat" value={shownCategory} onChange={(e) => setCategory(e.target.value)} disabled={!!selected || !!busy}>
             {categories.map((c) => <option key={c} value={c}>{CATEGORY_LABELS[c] || c}</option>)}
@@ -133,7 +138,8 @@ export default function RedTeam() {
       {suite && (
         <section className="team-panel">
           <h2>Suite results</h2>
-          <p className="muted">{suite.total} tests · {suite.counts.PASS} pass · {suite.counts.FAIL} fail · {suite.counts.NEEDS_REVIEW} need review · {suite.counts.ERROR} error</p>
+          <p className="muted">{suite.total} outcomes across {suite.trials} trial(s) · {suite.counts.PASS} pass · {suite.counts.FAIL} fail · {suite.counts.NEEDS_REVIEW} need review · {suite.counts.ERROR} error</p>
+          {suite.limitations?.map((note) => <p className="muted small" key={note}>{note}</p>)}
           <div className="table-wrap"><table>
             <thead><tr><th>Test</th><th>Category</th><th>Outcome</th><th>Defense triggered</th><th>Time</th></tr></thead>
             <tbody>{suite.results.map((r) => (

@@ -42,6 +42,8 @@ _NEW_COLUMNS = {
         "provider": "VARCHAR(32)", "explanation": "TEXT", "duration_ms": "INTEGER",
         "owner_role": "VARCHAR(16)", "run_group_id": "VARCHAR(32)", "comparison_id": "VARCHAR(32)",
         "defense_triggered": "BOOLEAN DEFAULT 0", "defense_actions": "TEXT",
+        "test_suite_version": "VARCHAR(32)", "trial_number": "INTEGER DEFAULT 1", "model_digest": "VARCHAR(255)",
+        "human_review_status": "VARCHAR(16)",
     },
     "defense_configs": {
         "hardened_prompt": "BOOLEAN DEFAULT 1", "is_active": "BOOLEAN DEFAULT 0",

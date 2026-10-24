@@ -148,11 +148,11 @@ def test_blue_cannot_see_red_artifacts_in_lists_or_dashboard_and_vice_versa(env)
     red_list = c.get("/api/tests", headers=H(h, "red_team")).json()
     blue_list = c.get("/api/tests", headers=H(h, "blue_team")).json()
     assert [t["test_id"] for t in red_list["items"]] == [red_id]
-    assert red_id not in [t["test_id"] for t in blue_list["items"]] and blue_list["total"] == 11
+    assert red_id not in [t["test_id"] for t in blue_list["items"]] and blue_list["total"] == 14
     assert c.get(f"/api/tests/{blue_id}", headers=H(h, "red_team")).status_code == 403
     assert c.get("/api/dashboard", headers=H(h, "red_team")).json()["total_tests"] == 1
-    assert c.get("/api/dashboard", headers=H(h, "blue_team")).json()["total_tests"] == 11
-    assert c.get("/api/dashboard", headers=H(h, "admin")).json()["total_tests"] == 12
+    assert c.get("/api/dashboard", headers=H(h, "blue_team")).json()["total_tests"] == 14
+    assert c.get("/api/dashboard", headers=H(h, "admin")).json()["total_tests"] == 15
 
 
 def test_red_team_cannot_see_private_defense_details(env):

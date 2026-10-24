@@ -4,12 +4,12 @@ from sqlalchemy.orm import Session
 from ..config import MAX_PROMPT_CHARS
 from ..database import get_db
 from ..models import TestRun, User
-from ..schemas import (CategoryId, CategoryOut, RunSuiteRequest, RunTestRequest, Status, SuiteResponse, TestCaseOut,
+from ..schemas import (CategoryId, CategoryOut, HumanReviewRequest, RunSuiteRequest, RunTestRequest, Status, SuiteResponse, TestCaseOut,
                        TestCasesResponse, TestDetail, TestListResponse)
-from ..services import defense_store, runner
+from ..services import audit, defense_store, runner
 from ..services.auth import current_user, deny_record_access, require_roles
 from ..services.evaluator import STATUSES
-from ..services.testcases import CASES, CATEGORIES, SUITE
+from ..services.testcases import CAPABILITY_NOTES, CASES, CATEGORIES, SUITE
 from . import _serialize as ser
 from .ai import get_provider_factory
 
@@ -25,7 +25,9 @@ def unavailable(e):
 def test_cases(user: User = Depends(current_user)):
     return TestCasesResponse(
         categories=[CategoryOut(id=k, label=v) for k, v in CATEGORIES.items()],
-        cases=[TestCaseOut(id=c.id, category=c.category, name=c.name, description=c.description, prompt=c.user) for c in SUITE],
+        cases=[TestCaseOut(id=c.id, category=c.category, name=c.name, description=c.description, prompt=c.user,
+                           severity=c.severity, success_criteria=c.success_criteria, remediation=c.remediation,
+                           owasp=list(c.owasp), availability=c.availability) for c in SUITE],
         custom_max_chars=MAX_PROMPT_CHARS,
     )
 
@@ -39,7 +41,14 @@ def run_test(req: RunTestRequest, user: User = Depends(require_roles("red_team")
             case = CASES.get(req.test_case_id)
             if not case:
                 raise HTTPException(status_code=404, detail=f"Unknown test case '{req.test_case_id}'.")
-            row = runner.run_case(db, factory, case, user, mode, cfg)
+            if case.availability != "implemented":
+                capability = case.availability.split(":", 1)[-1]
+                raise HTTPException(status_code=409, detail=f"This coverage target is not runnable: {CAPABILITY_NOTES.get(capability, case.availability)}")
+            rows = [runner.run_case(db, factory, case, user, mode, cfg) for _ in range(req.trials)]
+            for trial, saved in enumerate(rows, 1):
+                saved.trial_number = trial
+            db.commit()
+            row = rows[-1]
         else:
             row = runner.run_custom(db, factory, req.prompt, req.category, user, mode, cfg)
     except runner.BusyError:
@@ -52,13 +61,15 @@ def run_suite(req: RunSuiteRequest | None = None, user: User = Depends(require_r
               db: Session = Depends(get_db), factory=Depends(get_provider_factory)):
     mode, cfg = defense_store.resolve(db, (req or RunSuiteRequest()).mode)
     try:
-        gid, rows = runner.run_suite(db, factory, user, mode, cfg)
+        gid, rows = runner.run_suite(db, factory, user, mode, cfg, (req or RunSuiteRequest()).trials)
     except runner.BusyError:
         raise BUSY
     except runner.ProviderUnavailable as e:
         raise unavailable(e)
     counts = {s: sum(r.outcome == s for r in rows) for s in STATUSES}
-    return SuiteResponse(run_group_id=gid, total=len(rows), counts=counts, results=[ser.detail(r, user) for r in rows])
+    return SuiteResponse(run_group_id=gid, total=len(rows), counts=counts, results=[ser.detail(r, user) for r in rows],
+                         trials=(req or RunSuiteRequest()).trials,
+                         limitations=["NEEDS_REVIEW and ERROR are excluded from confirmed attack-success rates.", "Cases requiring RAG, tools, agents, or infrastructure are documented but not executed."])
 
 
 @router.get("/tests", response_model=TestListResponse)
@@ -80,4 +91,20 @@ def get_test(test_id: str, user: User = Depends(current_user), db: Session = Dep
         raise HTTPException(status_code=404, detail="Test not found.")
     if not ser.can_view(user, row):
         deny_record_access(db, user, "test", row.test_id)  # records the attempt, then 403
+    return ser.detail(row, user)
+
+
+@router.post("/tests/{test_id}/review", response_model=TestDetail)
+def review_test(test_id: str, req: HumanReviewRequest, user: User = Depends(require_roles("blue_team", "admin")),
+                db: Session = Depends(get_db)):
+    """Record human assessment without changing the evaluator's original verdict."""
+    row = db.scalar(select(TestRun).where(TestRun.test_id == test_id[:32]))
+    if not row:
+        raise HTTPException(status_code=404, detail="Test not found.")
+    if not ser.can_view(user, row):
+        deny_record_access(db, user, "test", row.test_id)
+    row.human_review_status = req.status
+    db.commit(); db.refresh(row)
+    audit.record(db, action="test.human_review", actor=user.email, outcome="success", test_id=row.test_id,
+                 details={"review_status": req.status, "evaluator_outcome": row.outcome})
     return ser.detail(row, user)

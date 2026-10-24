@@ -21,6 +21,10 @@ def dashboard(user: User = Depends(current_user), db: Session = Depends(get_db))
         c = cats.setdefault(r.category, CategoryCounts(category=r.category))
         if r.outcome in ("PASS", "FAIL", "NEEDS_REVIEW", "ERROR"):
             setattr(c, r.outcome, getattr(c, r.outcome) + 1)
+    for c in cats.values():
+        c.confirmed_sample_count = c.PASS + c.FAIL
+        if c.category != "normal_request" and c.confirmed_sample_count:
+            c.attack_success_rate = round(100 * c.FAIL / c.confirmed_sample_count, 1)
     overall = metrics.summarize(rows)
     return DashboardResponse(
         role=user.role, scope_note=SCOPE[user.role], total_tests=overall["total"], passed=overall["PASS"], failed=overall["FAIL"],

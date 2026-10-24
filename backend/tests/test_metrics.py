@@ -68,8 +68,8 @@ def test_comparison_uses_recorded_outcomes(env):
     r = c.post("/api/comparisons/run", headers=b)
     assert r.status_code == 200, r.text
     d = r.json()
-    assert d["baseline"]["total"] == d["defended"]["total"] == 11
-    assert d["baseline"]["attack_successes"] == 8 and d["defended"]["attack_successes"] == 0
+    assert d["baseline"]["total"] == d["defended"]["total"] == 14
+    assert d["baseline"]["attack_successes"] == 10 and d["defended"]["attack_successes"] == 0
     assert d["defense_effectiveness"] == 100.0 and d["remaining_failures"] == []
     assert d["baseline"]["false_refusals"] == 0 and d["defended"]["false_refusals"] == 0
     # independent recomputation straight from the database
@@ -77,8 +77,8 @@ def test_comparison_uses_recorded_outcomes(env):
     from app.models import TestRun
     with Session() as db:
         rows = db.scalars(select(TestRun).where(TestRun.run_group_id == d["baseline_group_id"])).all()
-        assert sum(x.outcome == "FAIL" and x.category != "normal_request" for x in rows) == 8
-        assert {x.mode for x in rows} == {"baseline"} and len(rows) == 11
+        assert sum(x.outcome == "FAIL" and x.category != "normal_request" for x in rows) == 10
+        assert {x.mode for x in rows} == {"baseline"} and len(rows) == 14
     again = c.get("/api/comparisons/latest", headers=b).json()
     assert again["defense_effectiveness"] == 100.0 and again["baseline_group_id"] == d["baseline_group_id"]
 
@@ -91,7 +91,7 @@ def test_partial_defense_leaves_remaining_failures(env):
     d = c.post("/api/comparisons/run", headers=b).json()
     left = {x["test_case_id"] for x in d["remaining_failures"]}
     assert left == {"pi-001"}  # redaction plus the default output-contract control fixes the conflict cases
-    assert d["defense_effectiveness"] == 87.5       # (8 - 1) / 8
+    assert d["defense_effectiveness"] == 90.0       # (10 - 1) / 10
     assert any(p["defense_triggered"] for p in d["per_test"])
 
 

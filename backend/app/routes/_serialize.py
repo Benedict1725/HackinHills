@@ -9,6 +9,7 @@ def _base(r: TestRun) -> dict:
         model=r.model, outcome=r.outcome, mode=r.mode, defense_triggered=bool(r.defense_triggered),
         false_refusal=(r.category == "normal_request" and r.outcome == "FAIL"), run_group_id=r.run_group_id,
         duration_ms=r.duration_ms, created_at=r.created_at,
+        trial_number=r.trial_number or 1, test_suite_version=r.test_suite_version,
     )
 
 
@@ -17,7 +18,8 @@ def summary(r: TestRun) -> TestSummary:
 
 
 def detail(r: TestRun, user: User) -> TestDetail:
-    d = _base(r) | dict(prompt=r.prompt, response=r.response, explanation=r.explanation)
+    d = _base(r) | dict(prompt=r.prompt, response=r.response, explanation=r.explanation,
+                        human_review_status=r.human_review_status or "NOT_REVIEWED")
     if user.role in ("blue_team", "admin"):  # the active configuration is private to Blue Team (and Admin oversight)
         d["defense_config_id"] = r.defense_config_id
         d["defense_actions"] = json.loads(r.defense_actions) if r.defense_actions else []
