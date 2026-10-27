@@ -168,3 +168,86 @@ The database migration is automatic and additive (`execution_status`, `security_
   - New endpoints, all admin-only on the server: `GET/POST /api/admin/users`, `PATCH /api/admin/users/{id}` (role, `is_active`), `GET /api/admin/overview`.
   - Accounts are deactivated, never deleted. Role changes and deactivation revoke that user's sessions. Admins cannot demote/deactivate themselves or the last active admin. Every change is audited; passwords are never logged or returned.
   - Existing databases gain `users.is_active` (default true) automatically at startup.
+
+## Run LeakProof AI Using Docker
+
+### Prerequisites
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
+- Access to the published Docker images on GitHub Container Registry (GHCR).
+
+### Pull the Docker Images
+
+```bash
+docker pull ghcr.io/jkp2356/leakproof-backend:latest
+docker pull ghcr.io/jkp2356/leakproof-frontend:latest
+```
+
+### Configure Environment Variables
+
+Create a `backend/.env` file using `backend/.env.example` as a template.
+
+Configure the database URL and AI provider settings. For Ollama running on the host machine, use:
+
+```dotenv
+AI_PROVIDER=ollama
+AI_MODEL=llama3.2:3b
+OLLAMA_HOST=http://host.docker.internal:11434
+```
+
+Never commit API keys, passwords, or other secrets to GitHub.
+
+### Start the Application
+
+Ensure `docker-compose.yml` uses the published image names:
+
+```yaml
+services:
+  backend:
+    image: ghcr.io/jkp2356/leakproof-backend:latest
+    env_file:
+      - ./backend/.env
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/jkp2356/leakproof-frontend:latest
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+```
+
+Run:
+
+```bash
+docker compose up -d
+```
+
+### Access the Application
+
+- Frontend: http://localhost:5173
+- Backend API documentation: http://localhost:8000/docs
+
+### Stop the Application
+
+```bash
+docker compose down
+```
+
+### Troubleshooting
+
+View container status:
+
+```bash
+docker compose ps
+```
+
+View application logs:
+
+```bash
+docker compose logs -f
+```
+
+If the images are private, authenticate to GHCR with an account that has permission to pull them.
